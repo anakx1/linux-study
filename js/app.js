@@ -14,6 +14,7 @@ let examSet = null;
 let examAnswers = {};
 let examStarted = 0;
 let examTimer = null;
+let visState = { id: 'boot', index: 0, playing: false, failed: false, timer: null };
 let scrollHandler = null;
 let searchIndex = null;
 let searchSelection = 0;
@@ -163,6 +164,7 @@ function currentRoute() {
   const parts = raw.split('/').filter(Boolean);
   if (!parts.length) return { view: 'home' };
   if (parts[0] === 'chapter') return { view: 'chapter', id: parts[1], anchor: parts[2] || null };
+  if (parts[0] === 'visuals') return { view: 'visuals', id: parts[1] || 'boot', stage: Math.max(0, parseInt(parts[2], 10) || 0) };
   return { view: parts[0], anchor: parts[1] || null };
 }
 function closeNav() {
@@ -224,6 +226,12 @@ function homeView() {
   const stats = totalStats();
   const last = state.last && byId(state.last) ? byId(state.last) : CHAPTERS[0];
   const continueLabel = state.last ? 'Continue where you left off' : 'Start with the foundations';
+  const vis = visualsData();
+  const visTeasers = {
+    boot: 'Firmware to login, with the failure modes that stop a boot.',
+    command: 'Keystroke → shell → syscalls → page cache → disk.',
+    packet: 'DNS → routing → ARP → TCP → TLS → server → response.'
+  };
   let tracksHTML = '';
   HLW.tracks.forEach(track => {
     const chs = CHAPTERS.filter(c => c.track === track.id);
@@ -284,6 +292,27 @@ function homeView() {
       <a class="btn btn-primary" href="#/chapter/${last.id}">Open chapter</a>
     </div>
 
+    ${vis ? `<section class="vis-promo">
+      <div class="vis-promo-head">
+        <div>
+          <div class="eyebrow">New · Interactive</div>
+          <h2>See the machine move</h2>
+          <p>Step through the three things a Linux system does constantly: boot, run a command, and send a packet. Every stage has a failure mode you can inject.</p>
+        </div>
+        <a class="btn" href="#/visuals">Open visuals <span aria-hidden="true">→</span></a>
+      </div>
+      <div class="vis-promo-grid">
+        ${vis.order.map(k => {
+          const v = vis.items[k];
+          return `<a class="vis-promo-card" href="#/visuals/${k}">
+            <span class="vpc-glyph">${v.glyph}</span>
+            <span class="vpc-body"><b>${esc(v.short)}</b><span>${esc(visTeasers[k] || v.title)}</span></span>
+            <span class="vpc-meta">${v.stages.length} stages</span>
+          </a>`;
+        }).join('')}
+      </div>
+    </section>` : ''}
+
     ${tracksHTML}
 
     <div class="rule"></div>
@@ -319,6 +348,8 @@ function chapterView(id, anchor) {
   const track = (HLW.tracks.find(t => t.id === ch.track) || {});
   const idx = CHAPTERS.findIndex(c => c.id === ch.id);
   const prev = CHAPTERS[idx - 1], next = CHAPTERS[idx + 1];
+  const vd = visualsData();
+  const visMatch = vd ? vd.order.map(k => ({ id: k, ...vd.items[k] })).find(v => v.chapters.includes(ch.id)) : null;
 
   const sections = ch.sections.map((s, i) => `
     <section class="concept" id="${esc(s.id)}">
@@ -431,6 +462,7 @@ function chapterView(id, anchor) {
       <div class="head-actions">
         <button class="btn ${done ? 'done' : 'btn-primary'}" data-complete="${ch.id}">${done ? '✓ Marked complete' : 'Mark chapter complete'}</button>
         <a class="btn" href="#/flashcards">Practice flashcards</a>
+        ${visMatch ? `<a class="btn btn-ghost" href="#/visuals/${visMatch.id}">See it in motion</a>` : ''}
         <button class="btn btn-ghost" onclick="window.print()">Print notes</button>
       </div>
       <div class="read-progress" aria-hidden="true"><i id="readBar"></i></div>
@@ -724,6 +756,219 @@ function notFoundView() {
   return `<div class="page"><div class="empty-state" style="margin-top:60px"><strong>Page not found</strong>The chapter you asked for is not in this study guide.<br><br><a class="btn" href="#/home">Back to overview</a></div></div>`;
 }
 
+/* ---------- visual explainers ---------- */
+function visualsData() {
+  return (window.HLW && HLW.visuals) ? HLW.visuals : null;
+}
+function visualFor(id) {
+  const d = visualsData();
+  if (!d) return null;
+  return d.items[id] || d.items[d.order[0]] || null;
+}
+function visStageHTML(v, i, failed) {
+  const s = v.stages[i];
+  const n = v.stages.length;
+  const link = s.link;
+  return `<article class="vs-card ${failed ? 'has-fail' : ''}">
+    <div class="vs-card-top">
+      <span class="vs-stepno">Stage ${pad2(i + 1)} / ${pad2(n)}</span>
+      <span class="vs-actor">${esc(s.actor)}</span>
+    </div>
+    <h2>${esc(s.title)}</h2>
+    <p class="vs-summary">${esc(s.summary)}</p>
+    <div class="vs-detail">${s.detail}</div>
+    <div class="vs-try">
+      <div class="vs-try-label"><span>Terminal</span><span>Try it</span></div>
+      ${codeBlock(s.cmd)}
+    </div>
+    <div class="vs-foot">
+      <a class="btn btn-sm" href="#/chapter/${link.ch}/${link.section}">${esc(link.label)} →</a>
+      ${s.fail ? `<button class="btn btn-sm ${failed ? 'btn-danger' : 'btn-ghost'}" data-vis-fail>${failed ? 'Clear failure' : 'Inject failure'}</button>` : ''}
+    </div>
+    ${failed && s.fail ? `<div class="vs-failure" role="status">
+      <div class="vf-head"><span class="vf-badge">Failure</span><b>${esc(s.fail.title)}</b></div>
+      <div class="vf-detail">${s.fail.detail}</div>
+      <div class="vf-code">${codeBlock(s.fail.cmd)}</div>
+      <button class="btn btn-sm" data-vis-recover>Recover from failure</button>
+    </div>` : ''}
+  </article>`;
+}
+function visualsView(id) {
+  const d = visualsData();
+  if (!d) return '<div class="page"><div class="empty-state"><strong>Visuals not loaded</strong>Check that data/visuals.js is present.</div></div>';
+  const activeId = d.items[id] ? id : d.order[0];
+  const v = d.items[activeId];
+  const tabs = d.order.map(k => {
+    const x = d.items[k];
+    return `<a class="vis-tab ${k === activeId ? 'active' : ''}" href="#/visuals/${k}">
+      <span class="vt-glyph" aria-hidden="true">${x.glyph}</span>
+      <span class="vt-text"><b>${esc(x.short)}</b><em>${x.stages.length} stages</em></span>
+    </a>`;
+  }).join('');
+  const stops = v.stages.map((s, i) => `<button class="vis-stop tone-${s.tone}" data-vis-stop="${i}" aria-label="Stage ${i + 1}: ${esc(s.label)}">
+      <span class="vs-dot">${i + 1}</span>
+      <span class="vs-label">${esc(s.label)}</span>
+      <span class="vs-sub">${esc(s.sub)}</span>
+    </button>`).join('');
+  return `<div class="page visuals-page">
+    <div class="eyebrow">Under the hood</div>
+    <h1 style="font-size:clamp(1.8rem,3.4vw,2.6rem);margin-bottom:8px">See the machine move.</h1>
+    <p class="muted" style="max-width:68ch">Three interactive walkthroughs of the processes the book keeps coming back to. Play them, scrub them, and inject the failures that turn a normal boot or request into a debugging session.</p>
+    <nav class="vis-tabs" aria-label="Visual explainers">${tabs}</nav>
+    <section class="vis-shell" data-vis="${activeId}">
+      <header class="vis-head">
+        <div>
+          <div class="vis-kicker">Interactive explainer</div>
+          <h2>${esc(v.title)}</h2>
+          <p>${esc(v.blurb)}</p>
+        </div>
+        <div class="vis-chapters">${v.chapters.map(cid => `<a class="chip" href="#/chapter/${cid}">Ch ${cid}</a>`).join('')}</div>
+      </header>
+      <div class="vis-controls">
+        <button class="btn btn-sm btn-icon" data-vis-prev aria-label="Previous stage" title="Previous stage">←</button>
+        <button class="btn btn-primary btn-sm" data-vis-play aria-label="Play walkthrough">▶ Play</button>
+        <button class="btn btn-sm btn-icon" data-vis-next aria-label="Next stage" title="Next stage">→</button>
+        <input class="vis-scrub" id="visScrub" type="range" min="0" max="${v.stages.length - 1}" step="1" value="0" aria-label="Walkthrough stage">
+        <span class="vis-count" id="visCount">1 / ${v.stages.length}</span>
+      </div>
+      <div class="vis-rail-wrap">
+        <div class="vis-rail" id="visRail">
+          <div class="vis-flow" aria-hidden="true"><i id="visPulse"></i></div>
+          ${stops}
+        </div>
+      </div>
+      <div id="visStage" aria-live="polite"></div>
+      <div class="vis-keybar"><span><kbd>←</kbd><kbd>→</kbd> step</span><span><kbd>space</kbd> play / pause</span><span>Click a stage to inspect it</span></div>
+    </section>
+  </div>`;
+}
+function visUpdate(scrollRail) {
+  const v = visualFor(visState.id);
+  if (!v) return;
+  const n = v.stages.length;
+  visState.index = Math.max(0, Math.min(n - 1, visState.index));
+  const s = v.stages[visState.index];
+  const rail = $('#visRail');
+  if (!rail) return;
+  $$('.vis-stop', rail).forEach((el, i) => {
+    el.classList.toggle('active', i === visState.index);
+    el.classList.toggle('done', i < visState.index);
+    el.classList.toggle('failed', i === visState.index && visState.failed);
+    if (i === visState.index) el.setAttribute('aria-current', 'step');
+    else el.removeAttribute('aria-current');
+  });
+  const stage = $('#visStage');
+  if (stage) stage.innerHTML = visStageHTML(v, visState.index, visState.failed);
+  const count = $('#visCount');
+  if (count) count.textContent = `${visState.index + 1} / ${n}`;
+  const scrub = $('#visScrub');
+  if (scrub) {
+    scrub.value = String(visState.index);
+    scrub.style.setProperty('--fill', `${n > 1 ? (visState.index / (n - 1)) * 100 : 0}%`);
+  }
+  const play = $('[data-vis-play]');
+  if (play) {
+    play.innerHTML = visState.playing ? '❚❚ Pause' : '▶ Play';
+    play.setAttribute('aria-label', visState.playing ? 'Pause walkthrough' : 'Play walkthrough');
+  }
+  const wrap = rail.closest('.vis-rail-wrap');
+  if (wrap) wrap.className = `vis-rail-wrap tone-${s.tone}`;
+  const active = $('.vis-stop.active', rail);
+  const pulse = $('#visPulse');
+  if (active && pulse) {
+    pulse.style.left = `${active.offsetLeft + active.offsetWidth / 2}px`;
+  }
+  if (scrollRail && active && rail.scrollWidth > rail.clientWidth + 4) {
+    const left = active.offsetLeft - rail.clientWidth / 2 + active.offsetWidth / 2;
+    rail.scrollTo({ left: Math.max(0, left), behavior: 'smooth' });
+  }
+}
+function visPause() {
+  if (visState.timer) { clearInterval(visState.timer); visState.timer = null; }
+  visState.playing = false;
+}
+function visPlay() {
+  const v = visualFor(visState.id);
+  if (!v) return;
+  if (visState.playing) { visPause(); visUpdate(false); return; }
+  if (visState.index >= v.stages.length - 1) visState.index = 0;
+  visState.playing = true;
+  visState.failed = false;
+  visState.timer = setInterval(() => {
+    const vv = visualFor(visState.id);
+    if (!vv) return;
+    if (visState.index >= vv.stages.length - 1) { visPause(); visUpdate(false); return; }
+    visState.index++;
+    visState.failed = false;
+    visUpdate(true);
+  }, 3800);
+  visUpdate(false);
+}
+function visMove(delta) {
+  if (currentRoute().view !== 'visuals') return;
+  const v = visualFor(visState.id);
+  if (!v) return;
+  visPause();
+  visState.failed = false;
+  visState.index = (visState.index + delta + v.stages.length) % v.stages.length;
+  visUpdate(true);
+}
+function initVisuals(route) {
+  const d = visualsData();
+  if (!d) return;
+  const activeId = d.items[route.id] ? route.id : d.order[0];
+  const v = d.items[activeId];
+  visState = {
+    id: activeId,
+    index: Math.max(0, Math.min(v.stages.length - 1, route.stage || 0)),
+    playing: false, failed: false, timer: null
+  };
+  const rail = $('#visRail');
+  if (rail) rail.addEventListener('click', e => {
+    const b = e.target.closest('[data-vis-stop]');
+    if (!b) return;
+    visPause();
+    visState.index = Number(b.dataset.visStop);
+    visState.failed = false;
+    visUpdate(true);
+  });
+  const stage = $('#visStage');
+  if (stage) stage.addEventListener('click', e => {
+    if (e.target.closest('[data-vis-fail]')) {
+      visPause();
+      visState.failed = !visState.failed;
+      visUpdate(false);
+      return;
+    }
+    if (e.target.closest('[data-vis-recover]')) {
+      visPause();
+      visState.failed = false;
+      visUpdate(false);
+    }
+  });
+  const prev = $('[data-vis-prev]'), next = $('[data-vis-next]'), play = $('[data-vis-play]');
+  if (prev) prev.addEventListener('click', () => visMove(-1));
+  if (next) next.addEventListener('click', () => visMove(1));
+  if (play) play.addEventListener('click', visPlay);
+  const scrub = $('#visScrub');
+  if (scrub) scrub.addEventListener('input', e => {
+    visPause();
+    visState.index = Number(e.target.value);
+    visState.failed = false;
+    visUpdate(false);
+  });
+  const onResize = () => visUpdate(true);
+  window.addEventListener('resize', onResize);
+  const onHide = () => { if (document.hidden && visState.playing) { visPause(); visUpdate(false); } };
+  document.addEventListener('visibilitychange', onHide);
+  cleanupFns.push(() => {
+    visPause();
+    window.removeEventListener('resize', onResize);
+    document.removeEventListener('visibilitychange', onHide);
+  });
+  visUpdate(true);
+}
+
 /* ---------- search ---------- */
 function buildSearchIndex() {
   const items = [];
@@ -741,6 +986,14 @@ function buildSearchIndex() {
     }));
     ch.quiz.forEach(q => items.push({
       kind: 'quiz', title: q.q, sub: `Chapter ${ch.id} quiz`, href: `#/chapter/${ch.id}/ch${ch.id}-quiz`, ref: `Ch ${ch.id}`, text: q.q + ' ' + q.options.join(' ')
+    }));
+  });
+  const vd = visualsData();
+  if (vd) vd.order.forEach(k => {
+    const v = vd.items[k];
+    v.stages.forEach((s, i) => items.push({
+      kind: 'visual', title: s.title, sub: `${v.label} · stage ${i + 1} of ${v.stages.length}`,
+      href: `#/visuals/${k}/${i}`, ref: 'Visual', text: s.title + ' ' + s.summary + ' ' + strip(s.detail)
     }));
   });
   return items;
@@ -795,10 +1048,10 @@ function renderSearchResults(query) {
     box.innerHTML = `<div class="search-empty"><strong>No results for “${esc(query)}”</strong><br>Try “inode”, “systemctl”, “subnet” or “rsync”.</div>`;
     return;
   }
-  const groups = { chapter: [], notes: [], command: [], card: [], quiz: [] };
+  const groups = { chapter: [], notes: [], visual: [], command: [], card: [], quiz: [] };
   scored.forEach(r => (groups[r.kind] || groups.notes).push(r));
   box.innerHTML = Object.keys(groups).filter(k => groups[k].length).map(k => {
-    const label = { chapter: 'Chapters', notes: 'Notes', command: 'Commands', card: 'Flashcards', quiz: 'Quiz' }[k];
+    const label = { chapter: 'Chapters', notes: 'Notes', visual: 'Visuals', command: 'Commands', card: 'Flashcards', quiz: 'Quiz' }[k];
     return `<div class="sr-group">${label}</div>` + groups[k].map(r => srItem(r, searchResults.indexOf(r))).join('');
   }).join('');
 }
@@ -844,6 +1097,7 @@ function render() {
   else if (route.view === 'flashcards') { app.innerHTML = flashcardsView(); renderDeck(); }
   else if (route.view === 'exam') { app.innerHTML = examView(); startExam(); }
   else if (route.view === 'progress') app.innerHTML = progressView();
+  else if (route.view === 'visuals') app.innerHTML = visualsView(route.id);
   else app.innerHTML = notFoundView();
 
   syncChrome();
@@ -864,6 +1118,7 @@ function initView(route) {
   if (route.view === 'flashcards') initFlashcards();
   if (route.view === 'exam') initExam();
   if (route.view === 'progress') initProgress();
+  if (route.view === 'visuals') initVisuals(route);
 }
 
 function initChapterPage(route) {
@@ -1089,6 +1344,13 @@ document.addEventListener('keydown', e => {
     e.preventDefault();
     e.target.closest('.flashcard').click();
     return;
+  }
+  if (currentRoute().view === 'visuals') {
+    const tag = (e.target.tagName || '').toLowerCase();
+    const typing = /input|textarea|select/.test(tag);
+    if (!typing && e.key === 'ArrowRight') { e.preventDefault(); visMove(1); return; }
+    if (!typing && e.key === 'ArrowLeft') { e.preventDefault(); visMove(-1); return; }
+    if (!/input|textarea|select|button|a/.test(tag) && e.key === ' ') { e.preventDefault(); visPlay(); return; }
   }
   if (e.key === 'Escape' && document.body.classList.contains('nav-open')) closeNav();
 });

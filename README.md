@@ -23,6 +23,7 @@ A local server is recommended (rather than opening `index.html` directly) so tha
 | Area | What it covers |
 | --- | --- |
 | **17 chapter modules** | Notes, learning objectives, diagrams, section references, callouts, key terms |
+| **Interactive visuals** | Three stage-by-stage walkthroughs: boot, command execution, and packet journey, with playback, scrubbing, and failure injection |
 | **Command reference** | 235 commands with descriptions and one-click copy |
 | **Labs** | 175 step-by-step exercises with checkboxes and safety notes |
 | **Quizzes** | 89 multiple-choice questions with explanations and scoring |
@@ -65,6 +66,7 @@ linux-study/
 ├── css/style.css           All styling, responsive + print
 ├── js/app.js               Routing, rendering, quizzes, exam, search, progress
 ├── data/book.js            Book metadata and study tracks
+├── data/visuals.js         Boot, command, and packet walkthroughs
 ├── data/ch01.js … ch17.js  One module per chapter
 ├── manifest.webmanifest    Installable web app metadata
 ├── sw.js                   Offline cache (service worker)
@@ -108,6 +110,8 @@ There is no framework and no bundler, so any static host works (GitHub Pages, Ne
 - `/` — open search (when not typing)
 - `↑` / `↓` — move through search results
 - `Enter` — open the highlighted result
+- `←` / `→` — step through a visual explainer
+- `Space` — play or pause a visual explainer
 - `Esc` — close search or the mobile navigation
 
 ## Attribution
