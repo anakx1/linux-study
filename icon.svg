@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="How Linux Works Study Lab">
+  <rect width="512" height="512" rx="112" fill="#0d1a15"/>
+  <rect x="28" y="28" width="456" height="456" rx="92" fill="none" stroke="#23544a" stroke-width="6"/>
+  <circle cx="118" cy="122" r="13" fill="#f87171"/>
+  <circle cx="162" cy="122" r="13" fill="#fbbf24"/>
+  <circle cx="206" cy="122" r="13" fill="#34d399"/>
+  <path d="M112 196 202 256 112 316" fill="none" stroke="#5eead4" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="242" y="292" width="160" height="26" rx="13" fill="#5eead4"/>
+  <rect x="112" y="382" width="288" height="12" rx="6" fill="#2dd4bf" opacity=".3"/>
+</svg>
