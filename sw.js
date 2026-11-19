@@ -1,5 +1,5 @@
 /* Offline cache for the study guide. Bump CACHE when content changes. */
-const CACHE = 'hlw-study-v11';
+const CACHE = 'hlw-study-v12';
 const ASSETS = [
   './',
   'index.html',
