@@ -2,6 +2,8 @@
 
 An offline-friendly, interactive study companion for **How Linux Works: What Every Superuser Should Know, 3rd Edition** by Brian Ward (No Starch Press, 2021).
 
+**Live site:** <https://anakx1.github.io/linux-study/>
+
 The guide follows the book chapter by chapter. All prose is original study material — a paraphrased companion that points back to the book's chapter and section numbers. The book remains the primary source; this site is for review, practice, and spaced repetition.
 
 ## Run it
@@ -17,6 +19,8 @@ python3 -m http.server 8099
 Then open <http://localhost:8099/>.
 
 A local server is recommended (rather than opening `index.html` directly) so that the service worker and offline cache can work. Everything else, including progress saving, works without a network connection once the page has loaded.
+
+The public copy is served by GitHub Pages from the `main` branch: pushing a commit republishes the site automatically.
 
 ## What's inside
 
